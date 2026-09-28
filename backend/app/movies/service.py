@@ -34,10 +34,18 @@ class MovieNotFoundError(Exception):
 
 
 async def list_movies_with_stats(
-    session: AsyncSession, search: str | None = None, page: int = 1, page_size: int = 10
+    session: AsyncSession,
+    search: str | None = None,
+    diretor: str | None = None,
+    genero: str | None = None,
+    ano: int | None = None,
+    order_by: str = "titulo",
+    order_direction: str = "asc",
+    page: int = 1,
+    page_size: int = 10,
 ) -> tuple[list[MovieListItem], int]:
-    """Lista filmes com suas estatísticas de avaliação."""
-    movies, total = await list_movies(session, search, page, page_size)
+    """Lista filmes com suas estatísticas de avaliação e filtros opcionais."""
+    movies, total = await list_movies(session, search, diretor, genero, ano, order_by, order_direction, page, page_size)
 
     items = []
     for movie in movies:
@@ -182,7 +190,7 @@ async def add_review_service(
     if not movie:
         raise MovieNotFoundError(f"Filme {movie_id} não encontrado")
 
-    review = await add_review(session, movie_id, data.nome, data.nota, data.comentario)
+    review = await add_review(session, movie.sk_movie_id, data.nome, data.nota, data.comentario)
     await session.commit()
     await session.refresh(review)
 

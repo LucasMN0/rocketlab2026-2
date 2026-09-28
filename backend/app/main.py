@@ -34,8 +34,9 @@ def create_app() -> FastAPI:
         CORSMiddleware,
         allow_origins=settings.backend_cors_origins,
         allow_credentials=True,
-        allow_methods=["*"],
+        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
         allow_headers=["*"],
+        max_age=3600,
     )
     app.include_router(api_router, prefix=settings.api_v1_prefix)
 

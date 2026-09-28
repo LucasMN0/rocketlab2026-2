@@ -128,3 +128,7 @@ class PaginatedMovies(BaseModel):
     page: int
     page_size: int
     pages: int
+
+
+class GenreList(BaseModel):
+    genres: list[str]

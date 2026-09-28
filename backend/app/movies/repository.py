@@ -37,25 +37,75 @@ async def get_or_create_director(session: AsyncSession, nome_pessoa: str) -> Dim
     return person
 
 
+async def list_genres(session: AsyncSession) -> list[DimGenre]:
+    """Retorna lista de todos os gêneros únicos, ordenados por nome."""
+    stmt = select(DimGenre).order_by(DimGenre.nome_genero)
+    result = await session.execute(stmt)
+    return result.scalars().all()
+
+
 async def list_movies(
-    session: AsyncSession, search: str | None = None, page: int = 1, page_size: int = 10
+    session: AsyncSession,
+    search: str | None = None,
+    diretor: str | None = None,
+    genero: str | None = None,
+    ano: int | None = None,
+    order_by: str = "titulo",
+    order_direction: str = "asc",
+    page: int = 1,
+    page_size: int = 10,
 ) -> tuple[list[DimMovie], int]:
-    """Lista filmes com paginação e busca opcional por título."""
+    """Lista filmes com paginação e filtros opcionais por título/diretor, diretor e gênero."""
     stmt = select(DimMovie).options(
-        selectinload(DimMovie.genres), selectinload(DimMovie.people), selectinload(DimMovie.reviews)
+        selectinload(DimMovie.genres), selectinload(DimMovie.people)
     )
 
+    # Busca por título
     if search:
         stmt = stmt.where(DimMovie.titulo.ilike(f"%{search}%"))
 
-    count_stmt = select(func.count()).select_from(DimMovie)
+    # Filtro por diretor específico
+    if diretor:
+        stmt = stmt.join(DimMovie.people).where(
+            (DimPerson.nome_pessoa.ilike(f"%{diretor}%")) & (DimPerson.tipo_pessoa == "Diretor")
+        )
+
+    if genero:
+        stmt = stmt.join(DimMovie.genres).where(DimGenre.nome_genero.ilike(f"%{genero}%"))
+
+    if ano:
+        stmt = stmt.where(DimMovie.ano_lancamento == ano)
+
+    count_stmt = select(func.count(func.distinct(DimMovie.sk_movie_id))).select_from(DimMovie)
     if search:
         count_stmt = count_stmt.where(DimMovie.titulo.ilike(f"%{search}%"))
+    if diretor:
+        count_stmt = count_stmt.join(DimMovie.people).where(
+            (DimPerson.nome_pessoa.ilike(f"%{diretor}%")) & (DimPerson.tipo_pessoa == "Diretor")
+        )
+    if genero:
+        count_stmt = count_stmt.join(DimMovie.genres).where(DimGenre.nome_genero.ilike(f"%{genero}%"))
+    if ano:
+        count_stmt = count_stmt.where(DimMovie.ano_lancamento == ano)
 
     count_result = await session.execute(count_stmt)
-    total = count_result.scalar()
+    total = count_result.scalar() or 0
 
-    stmt = stmt.offset((page - 1) * page_size).limit(page_size).order_by(DimMovie.titulo)
+    # Aplicar ordenação
+    order_column = DimMovie.titulo
+    if order_by == "ano_lancamento":
+        order_column = DimMovie.ano_lancamento
+    elif order_by == "nota_media":
+        # Ordenar por média calculada em tempo real
+        stmt = stmt.outerjoin(MovieReview).group_by(DimMovie.sk_movie_id)
+        order_column = func.avg(MovieReview.nota)
+
+    if order_direction.lower() == "desc":
+        stmt = stmt.order_by(order_column.desc())
+    else:
+        stmt = stmt.order_by(order_column.asc())
+
+    stmt = stmt.offset((page - 1) * page_size).limit(page_size)
     result = await session.execute(stmt)
     movies = result.unique().scalars().all()
 

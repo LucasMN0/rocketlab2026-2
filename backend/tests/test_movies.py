@@ -439,3 +439,226 @@ async def test_trocar_diretor_nao_apaga_diretor_antigo(client, session_factory):
     body_b = (await client.get(f"{API}/movies/{b['sk_movie_id']}")).json()
     assert body_a["diretor"] == "Diretor Novo"
     assert body_b["diretor"] == "Diretor Antigo"
+
+
+# ---------------------------------------------------------------------------
+# Testes de Filtros e Ordenação
+# ---------------------------------------------------------------------------
+
+
+async def test_filtro_por_genero(client):
+    """Testa filtro por gênero específico."""
+    await criar_filme(client, titulo="Filme Ação 1", genero="Ação")
+    await criar_filme(client, titulo="Filme Ação 2", genero="Ação")
+    await criar_filme(client, titulo="Filme Drama 1", genero="Drama")
+
+    response = await client.get(f"{API}/movies?genero=Ação")
+    body = response.json()
+    assert response.status_code == 200
+    assert body["total"] == 2
+    assert all(f["genero"] == "Ação" for f in body["items"])
+
+
+async def test_filtro_por_genero_case_insensitive(client):
+    """Testa que filtro por gênero ignora maiúsculas/minúsculas."""
+    await criar_filme(client, titulo="Filme Ação", genero="Ação")
+
+    response = await client.get(f"{API}/movies?genero=ação")
+    body = response.json()
+    assert body["total"] == 1
+
+
+async def test_filtro_por_diretor(client):
+    """Testa filtro por diretor específico."""
+    await criar_filme(client, titulo="Filme 1", diretor="Martin Scorsese")
+    await criar_filme(client, titulo="Filme 2", diretor="Martin Scorsese")
+    await criar_filme(client, titulo="Filme 3", diretor="Steven Spielberg")
+
+    response = await client.get(f"{API}/movies?diretor=Martin%20Scorsese")
+    body = response.json()
+    assert body["total"] == 2
+    assert all(f["diretor"] == "Martin Scorsese" for f in body["items"])
+
+
+async def test_filtro_por_diretor_parcial(client):
+    """Testa que filtro por diretor funciona com busca parcial."""
+    await criar_filme(client, titulo="Filme 1", diretor="Martin Scorsese")
+
+    response = await client.get(f"{API}/movies?diretor=Martin")
+    body = response.json()
+    assert body["total"] == 1
+
+
+async def test_filtro_por_ano(client):
+    """Testa filtro por ano de lançamento."""
+    await criar_filme(client, titulo="Filme 2020", ano_lancamento=2020)
+    await criar_filme(client, titulo="Filme 2021", ano_lancamento=2021)
+    await criar_filme(client, titulo="Filme 2021 B", ano_lancamento=2021)
+
+    response = await client.get(f"{API}/movies?ano=2021")
+    body = response.json()
+    assert body["total"] == 2
+    assert all(f["ano_lancamento"] == 2021 for f in body["items"])
+
+
+async def test_filtros_combinados(client):
+    """Testa uso simultâneo de múltiplos filtros."""
+    await criar_filme(client, titulo="Matrix", diretor="Wachowski", genero="Ficção", ano_lancamento=1999)
+    await criar_filme(client, titulo="Matrix 2", diretor="Wachowski", genero="Ficção", ano_lancamento=2003)
+    await criar_filme(client, titulo="Inception", diretor="Nolan", genero="Ficção", ano_lancamento=2010)
+
+    response = await client.get(f"{API}/movies?diretor=Wachowski&ano=1999")
+    body = response.json()
+    assert body["total"] == 1
+    assert body["items"][0]["titulo"] == "Matrix"
+
+
+async def test_ordenacao_por_titulo_asc(client):
+    """Testa ordenação alfabética ascendente por título."""
+    await criar_filme(client, titulo="Zebra")
+    await criar_filme(client, titulo="Apple")
+    await criar_filme(client, titulo="Banana")
+
+    response = await client.get(f"{API}/movies?order_by=titulo&order_direction=asc")
+    body = response.json()
+    titulos = [f["titulo"] for f in body["items"]]
+    assert titulos == ["Apple", "Banana", "Zebra"]
+
+
+async def test_ordenacao_por_titulo_desc(client):
+    """Testa ordenação alfabética descendente por título."""
+    await criar_filme(client, titulo="Zebra")
+    await criar_filme(client, titulo="Apple")
+    await criar_filme(client, titulo="Banana")
+
+    response = await client.get(f"{API}/movies?order_by=titulo&order_direction=desc")
+    body = response.json()
+    titulos = [f["titulo"] for f in body["items"]]
+    assert titulos == ["Zebra", "Banana", "Apple"]
+
+
+async def test_ordenacao_por_ano_asc(client):
+    """Testa ordenação ascendente por ano de lançamento."""
+    await criar_filme(client, titulo="Filme 2", ano_lancamento=2020)
+    await criar_filme(client, titulo="Filme 1", ano_lancamento=2010)
+    await criar_filme(client, titulo="Filme 3", ano_lancamento=2030)
+
+    response = await client.get(f"{API}/movies?order_by=ano_lancamento&order_direction=asc")
+    body = response.json()
+    anos = [f["ano_lancamento"] for f in body["items"]]
+    assert anos == [2010, 2020, 2030]
+
+
+async def test_ordenacao_por_ano_desc(client):
+    """Testa ordenação descendente por ano de lançamento."""
+    await criar_filme(client, titulo="Filme 2", ano_lancamento=2020)
+    await criar_filme(client, titulo="Filme 1", ano_lancamento=2010)
+    await criar_filme(client, titulo="Filme 3", ano_lancamento=2030)
+
+    response = await client.get(f"{API}/movies?order_by=ano_lancamento&order_direction=desc")
+    body = response.json()
+    anos = [f["ano_lancamento"] for f in body["items"]]
+    assert anos == [2030, 2020, 2010]
+
+
+async def test_ordenacao_por_nota_media_asc(client):
+    """Testa ordenação ascendente por nota média."""
+    filme1 = await criar_filme(client, titulo="Filme 1")
+    filme2 = await criar_filme(client, titulo="Filme 2")
+    filme3 = await criar_filme(client, titulo="Filme 3")
+
+    await criar_review(client, filme1["sk_movie_id"], 9)
+    await criar_review(client, filme2["sk_movie_id"], 5)
+    await criar_review(client, filme3["sk_movie_id"], 7)
+
+    response = await client.get(f"{API}/movies?order_by=nota_media&order_direction=asc")
+    body = response.json()
+    notas = [f["nota_media"] for f in body["items"]]
+    assert notas == [5, 7, 9]
+
+
+async def test_ordenacao_por_nota_media_desc(client):
+    """Testa ordenação descendente por nota média."""
+    filme1 = await criar_filme(client, titulo="Filme 1")
+    filme2 = await criar_filme(client, titulo="Filme 2")
+    filme3 = await criar_filme(client, titulo="Filme 3")
+
+    await criar_review(client, filme1["sk_movie_id"], 9)
+    await criar_review(client, filme2["sk_movie_id"], 5)
+    await criar_review(client, filme3["sk_movie_id"], 7)
+
+    response = await client.get(f"{API}/movies?order_by=nota_media&order_direction=desc")
+    body = response.json()
+    notas = [f["nota_media"] for f in body["items"]]
+    assert notas == [9, 7, 5]
+
+
+# ---------------------------------------------------------------------------
+# Testes de Limpeza de Dados
+# ---------------------------------------------------------------------------
+
+
+async def test_limpeza_de_titulo_corrompido(client):
+    """Testa que títulos com caracteres corrompidos são limpos."""
+    titulo_corrompido = 'blessed ""look At The Birds"""'
+    filme = await criar_filme(client, titulo=titulo_corrompido)
+
+    # Verificar que o título foi limpo na resposta
+    assert filme["titulo"] == "blessed look At The Birds"
+
+    # Verificar que aparece limpo na listagem
+    response = await client.get(f"{API}/movies/{filme['sk_movie_id']}")
+    body = response.json()
+    assert body["titulo"] == "blessed look At The Birds"
+
+
+async def test_busca_em_titulo_limpo(client):
+    """Testa que busca funciona com títulos que foram limpos."""
+    titulo_corrompido = 'blessed ""movie"""'
+    await criar_filme(client, titulo=titulo_corrompido)
+
+    response = await client.get(f"{API}/movies?search=blessed")
+    body = response.json()
+    assert body["total"] == 1
+
+
+# ---------------------------------------------------------------------------
+# Testes do Endpoint de Gêneros
+# ---------------------------------------------------------------------------
+
+
+async def test_listar_generos_retorna_lista(client):
+    """Testa que endpoint de gêneros retorna lista de gêneros."""
+    await criar_filme(client, genero="Ação")
+    await criar_filme(client, genero="Drama")
+    await criar_filme(client, genero="Ficção Científica")
+
+    response = await client.get(f"{API}/movies/genres")
+    body = response.json()
+    assert response.status_code == 200
+    assert "genres" in body
+    assert "Ação" in body["genres"]
+    assert "Drama" in body["genres"]
+    assert "Ficção Científica" in body["genres"]
+
+
+async def test_generos_nao_duplicam(client):
+    """Testa que gêneros duplicados aparecem apenas uma vez."""
+    await criar_filme(client, genero="Ação")
+    await criar_filme(client, genero="Ação")
+    await criar_filme(client, genero="Ação")
+
+    response = await client.get(f"{API}/movies/genres")
+    body = response.json()
+    assert body["genres"].count("Ação") == 1
+
+
+async def test_generos_retornam_ordenados(client):
+    """Testa que gêneros retornam em ordem alfabética."""
+    await criar_filme(client, genero="Zebra")
+    await criar_filme(client, genero="Apple")
+    await criar_filme(client, genero="Banana")
+
+    response = await client.get(f"{API}/movies/genres")
+    body = response.json()
+    assert body["genres"] == ["Apple", "Banana", "Zebra"]
