@@ -63,8 +63,10 @@ async def list_movies(
 
 
 async def get_movie_by_id(session: AsyncSession, movie_id: str) -> DimMovie | None:
-    """Busca um filme pelo ID com eager load de relacionamentos."""
-    stmt = select(DimMovie).where(DimMovie.sk_movie_id == movie_id).options(
+    """Busca um filme pelo sk_movie_id ou id_filme com eager load de relacionamentos."""
+    stmt = select(DimMovie).where(
+        (DimMovie.sk_movie_id == movie_id) | (DimMovie.id_filme == movie_id)
+    ).options(
         selectinload(DimMovie.genres),
         selectinload(DimMovie.people),
         selectinload(DimMovie.reviews),

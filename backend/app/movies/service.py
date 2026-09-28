@@ -1,5 +1,8 @@
 """Camada de serviço para regras de negócio de filmes."""
 
+import random
+import time
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.movies.models import DimMovie
@@ -51,6 +54,7 @@ async def list_movies_with_stats(
 
         item = MovieListItem(
             sk_movie_id=movie.sk_movie_id,
+            id_filme=movie.id_filme,
             titulo=movie.titulo,
             ano_lancamento=movie.ano_lancamento,
             genero=genero,
@@ -113,7 +117,11 @@ async def create_movie_service(session: AsyncSession, data: MovieCreate) -> Movi
     genre = await get_or_create_genre(session, data.genero)
     director = await get_or_create_director(session, data.diretor)
 
+    # Gera um id_filme válido: timestamp + número aleatório
+    id_filme = str(int(time.time() * 1000) + random.randint(0, 9999))
+
     movie = DimMovie(
+        id_filme=id_filme,
         titulo=data.titulo,
         ano_lancamento=data.ano_lancamento,
         sinopse=data.sinopse,

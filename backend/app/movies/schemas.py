@@ -2,18 +2,42 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+
+def clean_text(value: str | None) -> str | None:
+    """Remove escape characters and corrupted encoding from text."""
+    if not value:
+        return value
+    # Remove escaped quotes that appear in titles
+    value = value.replace('"""', '"').replace('""', '')
+    # Remove leading/trailing double quotes
+    value = value.strip('"')
+    # Clean up common encoding issues
+    value = value.replace('M-bM-^@M-^S', "'")  # UTF-8 encoding issue for apostrophe
+    value = value.replace('M-bM-^@M-^Y', '"')  # UTF-8 encoding issue for quote
+    return value.strip() if value else None
 
 
 class GenreOut(BaseModel):
     sk_genre_id: str
     nome_genero: str
 
+    @field_validator("nome_genero", mode="before")
+    @classmethod
+    def clean_fields(cls, v: str | None) -> str | None:
+        return clean_text(v)
+
 
 class PersonOut(BaseModel):
     sk_person_id: str
     nome_pessoa: str
     tipo_pessoa: str
+
+    @field_validator("nome_pessoa", "tipo_pessoa", mode="before")
+    @classmethod
+    def clean_fields(cls, v: str | None) -> str | None:
+        return clean_text(v)
 
 
 class ReviewCreate(BaseModel):
@@ -30,6 +54,11 @@ class ReviewOut(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+    @field_validator("nome", "comentario", mode="before")
+    @classmethod
+    def clean_fields(cls, v: str | None) -> str | None:
+        return clean_text(v)
 
 
 class MovieCreate(BaseModel):
@@ -54,6 +83,7 @@ class MovieUpdate(BaseModel):
 
 class MovieListItem(BaseModel):
     sk_movie_id: str
+    id_filme: str
     titulo: str
     ano_lancamento: int | None
     genero: str | None
@@ -61,6 +91,11 @@ class MovieListItem(BaseModel):
     url_poster: str | None
     nota_media: float | None
     qtd_avaliacoes: int
+
+    @field_validator("titulo", "genero", "diretor", "url_poster", mode="before")
+    @classmethod
+    def clean_fields(cls, v: str | None) -> str | None:
+        return clean_text(v)
 
 
 class MovieDetail(BaseModel):
@@ -78,6 +113,13 @@ class MovieDetail(BaseModel):
     reviews: list[ReviewOut]
 
     model_config = {"from_attributes": True}
+
+    @field_validator(
+        "titulo", "sinopse", "genero", "diretor", "url_poster", "url_backdrop", mode="before"
+    )
+    @classmethod
+    def clean_fields(cls, v: str | None) -> str | None:
+        return clean_text(v)
 
 
 class PaginatedMovies(BaseModel):
